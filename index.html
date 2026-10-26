@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PolskaPogoda – uśredniona pogoda z kilku źródeł</title>
+<meta name="description" content="Aktualna pogoda w polskich miastach, uśredniona z danych IMGW, MET Norway i Open-Meteo.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#e9eff3; --surface:#f8fafb; --ink:#10263b; --muted:#5a6b7a; --line:#cbd6de;
+  --dot:#2f6fa3; --avg:#f0a800; --err:#a33a2a;
+  --display:"Bricolage Grotesque",system-ui,sans-serif;
+  --body:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+}
+@media (prefers-color-scheme:dark){
+  :root{--bg:#0d1a27; --surface:#142536; --ink:#e6eef4; --muted:#93a6b6; --line:#27394b; --dot:#6fb0e3; --avg:#f5b800; --err:#ff8f7a}
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font:16px/1.5 var(--body);min-height:100vh;display:flex;flex-direction:column}
+.wrap{width:100%;max-width:760px;margin:0 auto;padding:0 20px}
+header{padding:36px 0 8px}
+h1{font:700 clamp(2rem,6vw,2.8rem)/1 var(--display);letter-spacing:-.02em;margin:0}
+.tag{color:var(--muted);margin:8px 0 0;max-width:48ch}
+form{display:flex;gap:8px;margin:24px 0 12px}
+input{flex:1;min-width:0;font:inherit;padding:12px 14px;border:1.5px solid var(--line);border-radius:6px;background:var(--surface);color:var(--ink)}
+button{font:600 1rem var(--body);padding:12px 20px;border:0;border-radius:6px;background:var(--ink);color:var(--bg);cursor:pointer}
+input:focus-visible,button:focus-visible,.chip:focus-visible,a:focus-visible{outline:3px solid var(--avg);outline-offset:2px}
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:28px}
+.chip{font:inherit;font-size:.9rem;padding:5px 12px;border:1px solid var(--line);border-radius:999px;background:transparent;color:var(--ink);cursor:pointer}
+.chip:hover{border-color:var(--ink)}
+main{flex:1}
+.msg{color:var(--muted);padding:24px 0}
+.msg.error{color:var(--err)}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:24px;margin-bottom:24px}
+.place{margin:0;font:700 1.3rem var(--display)}
+.region{color:var(--muted);font-size:.9rem}
+.hero{display:flex;align-items:center;gap:20px;margin:16px 0 4px}
+.temp{font:700 clamp(4rem,16vw,6rem)/.9 var(--display);letter-spacing:-.04em}
+.temp small{font-size:.4em;letter-spacing:0;vertical-align:top;margin-left:2px}
+.cond{font-size:1.1rem}
+.cond .emoji{font-size:2.4rem;display:block;line-height:1.1}
+.feels{color:var(--muted);font-size:.95rem}
+.metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:16px;margin:24px 0;padding-top:20px;border-top:1px solid var(--line)}
+.metrics dt{font-size:.85rem;color:var(--muted)}
+.metrics dd{margin:2px 0 0;font:500 1.35rem var(--display)}
+.arrow{display:inline-block;transition:transform .3s}
+h2{font:700 1.05rem var(--display);margin:0 0 4px}
+.sub{color:var(--muted);font-size:.9rem;margin:0 0 20px}
+.scale{position:relative;height:64px;margin:0 10px}
+.scale::before{content:"";position:absolute;left:0;right:0;top:30px;height:2px;background:var(--line)}
+.dot{position:absolute;top:22px;width:18px;height:18px;margin-left:-9px;border-radius:50%;background:var(--dot);border:2px solid var(--surface)}
+.dot span{position:absolute;top:-22px;left:50%;transform:translateX(-50%);font-size:.75rem;white-space:nowrap;color:var(--muted)}
+.dot b{position:absolute;top:22px;left:50%;transform:translateX(-50%);font:500 .85rem var(--body);white-space:nowrap}
+.mark{position:absolute;top:12px;width:4px;height:38px;margin-left:-2px;background:var(--avg);border-radius:2px}
+.mark span{position:absolute;top:-4px;left:10px;font:700 .8rem var(--body);white-space:nowrap}
+table{width:100%;border-collapse:collapse;font-size:.92rem;margin-top:8px}
+th,td{text-align:left;padding:9px 6px;border-bottom:1px solid var(--line);vertical-align:top}
+th{font-weight:600;color:var(--muted);font-size:.82rem}
+td.n{font-variant-numeric:tabular-nums}
+.fail{color:var(--err)}
+.note{display:block;color:var(--muted);font-size:.8rem}
+.scroll{overflow-x:auto}
+footer{border-top:1px solid var(--line);padding:20px 0 32px;color:var(--muted);font-size:.85rem}
+footer a{color:inherit}
+footer p{margin:4px 0}
+.skeleton{height:260px;border-radius:10px;background:var(--surface);border:1px solid var(--line);opacity:.6}
+@media (prefers-reduced-motion:no-preference){.skeleton{animation:p 1.2s ease-in-out infinite alternate}@keyframes p{to{opacity:.3}}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>PolskaPogoda</h1>
+    <p class="tag">Aktualna pogoda w Twoim mieście, uśredniona z kilku niezależnych źródeł. Zobaczysz też, jak bardzo się ze sobą zgadzają.</p>
+  </header>
+
+  <form id="f" autocomplete="off">
+    <input id="q" name="q" type="search" placeholder="Wpisz miejscowość, np. Gdynia" aria-label="Miejscowość" maxlength="60" required>
+    <button type="submit">Sprawdź pogodę</button>
+  </form>
+  <div class="chips" id="chips"></div>
+
+  <main id="out" aria-live="polite">
+    <p class="msg">Wpisz nazwę miejscowości albo wybierz jedno z popularnych miast.</p>
+  </main>
+
+  <footer>
+    <p><strong>Źródła danych:</strong>
+      <a href="https://danepubliczne.imgw.pl" target="_blank" rel="noopener">IMGW-PIB</a> (dane synoptyczne z najbliższej stacji),
+      <a href="https://api.met.no" target="_blank" rel="noopener">MET Norway</a> (CC BY 4.0),
+      <a href="https://open-meteo.com" target="_blank" rel="noopener">Open-Meteo</a> (CC BY 4.0).
+      Lokalizacja miejscowości: geokodowanie Open-Meteo.</p>
+    <p>Wartość uśredniona to zwykła średnia z dostępnych źródeł; kierunek wiatru to średnia kołowa, a opis pogody wybierany jest większością głosów. Dane mają charakter informacyjny.</p>
+  </footer>
+</div>
+
+<script>
+var CITIES = ["Warszawa","Kraków","Gdańsk","Wrocław","Poznań","Łódź","Olsztyn","Białystok","Lublin","Szczecin"];
+var out = document.getElementById("out"), q = document.getElementById("q");
+var DIRS = ["N","NE","E","SE","S","SW","W","NW"];
+
+function esc(s){ return String(s == null ? "" : s).replace(/[&<>"']/g, function(c){ return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]; }); }
+function pl(n, d){ return n == null ? "–" : Number(n).toFixed(d == null ? 1 : d).replace(".", ","); }
+function dirName(deg){ return deg == null ? "" : DIRS[Math.round(deg / 45) % 8]; }
+function kmh(ms){ return ms == null ? null : ms * 3.6; }
+
+CITIES.forEach(function(c){
+  var b = document.createElement("button");
+  b.type = "button"; b.className = "chip"; b.textContent = c;
+  b.onclick = function(){ q.value = c; load(c); };
+  document.getElementById("chips").appendChild(b);
+});
+
+document.getElementById("f").addEventListener("submit", function(e){
+  e.preventDefault();
+  var v = q.value.trim();
+  if (v) load(v);
+});
+
+function load(city){
+  out.innerHTML = '<div class="skeleton"></div>';
+  history.replaceState(null, "", "#" + encodeURIComponent(city));
+  fetch("api.php?city=" + encodeURIComponent(city))
+    .then(function(r){ return r.json().then(function(j){ return { ok: r.ok, j: j }; }); })
+    .then(function(x){
+      if (!x.ok) { out.innerHTML = '<p class="msg error">' + esc(x.j.error || "Wystąpił błąd.") + '</p>'; return; }
+      render(x.j);
+    })
+    .catch(function(){ out.innerHTML = '<p class="msg error">Nie udało się połączyć z serwerem. Odśwież stronę i spróbuj ponownie.</p>'; });
+}
+
+function strip(d){
+  var pts = d.sources.filter(function(s){ return s.ok && s.data.temp != null; });
+  if (pts.length < 2) return '<p class="sub">Do porównania potrzebne są co najmniej dwa źródła.</p>';
+  var vals = pts.map(function(s){ return s.data.temp; }).concat([d.avg.temp]);
+  var lo = Math.min.apply(null, vals) - 1, hi = Math.max.apply(null, vals) + 1;
+  var pos = function(v){ return ((v - lo) / (hi - lo) * 100).toFixed(1) + "%"; };
+  var html = '<div class="scale" role="img" aria-label="Porównanie temperatur ze źródeł">';
+  pts.forEach(function(s){
+    html += '<div class="dot" style="left:' + pos(s.data.temp) + '"><span>' + esc(s.name) + '</span><b>' + pl(s.data.temp) + '°</b></div>';
+  });
+  html += '<div class="mark" style="left:' + pos(d.avg.temp) + '"><span>średnia</span></div></div>';
+  return html;
+}
+
+function render(d){
+  var a = d.avg, spreadTxt = "";
+  if (d.spread != null) {
+    spreadTxt = d.spread <= 1 ? "Źródła są zgodne: różnica temperatur to " + pl(d.spread) + " °C."
+      : "Źródła różnią się o " + pl(d.spread) + " °C.";
+  }
+  var h = '<section class="card"><h2 class="place">' + esc(d.city.name) + ' <span class="region">' + esc(d.city.region) + '</span></h2>';
+  h += '<div class="hero"><div class="temp">' + pl(a.temp) + '<small>°C</small></div><div class="cond">';
+  h += a.catEmoji ? '<span class="emoji">' + a.catEmoji + '</span>' + esc(a.catLabel) : '';
+  if (a.feels != null) h += '<span class="feels">Odczuwalna ' + pl(a.feels) + ' °C</span>';
+  h += '</div></div>';
+  h += '<dl class="metrics">';
+  h += '<div><dt>Wiatr</dt><dd>' + pl(kmh(a.wind), 0) + ' km/h ';
+  if (a.windDir != null) h += '<span class="arrow" style="transform:rotate(' + (a.windDir + 180) + 'deg)" aria-hidden="true">↑</span> ' + dirName(a.windDir);
+  h += '</dd></div>';
+  h += '<div><dt>Wilgotność</dt><dd>' + pl(a.humidity, 0) + ' %</dd></div>';
+  h += '<div><dt>Ciśnienie</dt><dd>' + pl(a.pressure, 0) + ' hPa</dd></div></dl>';
+  h += '<p class="sub" style="margin:0">Średnia z ' + d.used + ' z ' + d.total + ' źródeł.</p></section>';
+
+  h += '<section class="card"><h2>Zgodność źródeł</h2><p class="sub">' + esc(spreadTxt) + '</p>' + strip(d) + '</section>';
+
+  h += '<section class="card"><h2>Dane ze źródeł</h2><div class="scroll"><table><thead><tr><th>Źródło</th><th>Temp.</th><th>Wiatr</th><th>Wilg.</th><th>Ciśn.</th><th>Opis</th></tr></thead><tbody>';
+  d.sources.forEach(function(s){
+    var name = '<a href="' + esc(s.url) + '" target="_blank" rel="noopener">' + esc(s.name) + '</a>';
+    if (!s.ok) {
+      h += '<tr><td>' + name + '</td><td colspan="5" class="fail">Niedostępne: ' + esc(s.error) + '</td></tr>';
+      return;
+    }
+    var x = s.data;
+    var desc = x.desc || (x.cat && d.catLabels[x.cat]) || "–";
+    var note = [x.note, x.observed ? "pomiar: " + x.observed : ""].filter(Boolean).join(", ");
+    h += '<tr><td>' + name + (note ? '<span class="note">' + esc(note) + '</span>' : '') + '</td>' +
+      '<td class="n">' + pl(x.temp) + ' °C</td>' +
+      '<td class="n">' + pl(kmh(x.wind), 0) + ' km/h ' + esc(dirName(x.windDir)) + '</td>' +
+      '<td class="n">' + pl(x.humidity, 0) + ' %</td>' +
+      '<td class="n">' + pl(x.pressure, 0) + ' hPa</td>' +
+      '<td>' + esc(desc) + '</td></tr>';
+  });
+  h += '</tbody></table></div></section>';
+  out.innerHTML = h;
+}
+
+if (location.hash.length > 1) {
+  var c = decodeURIComponent(location.hash.slice(1));
+  q.value = c; load(c);
+}
+</script>
+</body>
+</html>
