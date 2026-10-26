@@ -1,4 +1,4 @@
-# PolskaPogoda
+# PolskaPogoda - https://polskapogoda.freedev.app/
 
 Prosta strona, która pokazuje **aktualną pogodę w polskich miejscowościach, uśrednioną z kilku niezależnych źródeł**. Oprócz średniej widać dane z każdego źródła osobno oraz to, jak bardzo się ze sobą zgadzają.
 
